@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Corgi — VIN Decoder</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0d0d0d; --bg2: #161616; --bg3: #1e1e1e;
+      --line: rgba(255,255,255,0.08); --line2: rgba(255,255,255,0.14);
+      --text: #f0ede8; --muted: #6b6760; --accent: #e8d5a3; --accent2: #c9a84c;
+      --danger: #c0614a; --success: #5a9e72;
+      --mono: 'Space Mono', monospace; --sans: 'DM Sans', sans-serif;
+    }
+    html, body { background: var(--bg); color: var(--text); font-family: var(--sans); min-height: 100vh; -webkit-font-smoothing: antialiased; }
+    body::before {
+      content: ''; position: fixed; inset: 0;
+      background-image: linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+      background-size: 48px 48px; pointer-events: none; z-index: 0;
+    }
+    .container { position: relative; z-index: 1; max-width: 860px; margin: 0 auto; padding: 0 2rem; }
+    header { padding: 3rem 0 2.5rem; border-bottom: 1px solid var(--line); margin-bottom: 3rem; }
+    .logo { display: flex; align-items: baseline; gap: 0.75rem; margin-bottom: 0.5rem; }
+    .logo-name { font-family: var(--mono); font-size: 1.1rem; font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase; color: var(--accent); }
+    .logo-sep { color: var(--muted); font-family: var(--mono); }
+    .logo-sub { font-family: var(--mono); font-size: 0.7rem; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; }
+    .tagline { font-size: 0.85rem; color: var(--muted); font-weight: 300; letter-spacing: 0.02em; }
+    .search-section { margin-bottom: 2.5rem; }
+    .input-group { display: flex; border: 1px solid var(--line2); border-radius: 4px; overflow: hidden; transition: border-color 0.2s; }
+    .input-group:focus-within { border-color: var(--accent2); }
+    #vin-input { flex: 1; background: var(--bg2); border: none; outline: none; padding: 0.9rem 1.25rem; font-family: var(--mono); font-size: 1rem; letter-spacing: 0.12em; color: var(--text); text-transform: uppercase; }
+    #vin-input::placeholder { color: var(--muted); letter-spacing: 0.05em; font-size: 0.85rem; }
+    .char-counter { display: flex; align-items: center; padding: 0 1rem; background: var(--bg2); font-family: var(--mono); font-size: 0.7rem; color: var(--muted); border-left: 1px solid var(--line); min-width: 52px; justify-content: center; transition: color 0.2s; }
+    .char-counter.ready { color: var(--success); }
+    #decode-btn { background: var(--accent2); color: #0d0d0d; border: none; padding: 0 1.5rem; font-family: var(--mono); font-size: 0.75rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; cursor: pointer; transition: background 0.15s, transform 0.1s; border-left: 1px solid rgba(0,0,0,0.2); }
+    #decode-btn:hover { background: var(--accent); }
+    #decode-btn:active { transform: scale(0.97); }
+    #decode-btn:disabled { background: var(--bg3); color: var(--muted); cursor: default; }
+    #result { opacity: 0; transform: translateY(8px); transition: opacity 0.3s, transform 0.3s; }
+    #result.visible { opacity: 1; transform: translateY(0); }
+    .vin-bar { display: flex; margin-bottom: 1.5rem; border: 1px solid var(--line); border-radius: 3px; overflow: hidden; }
+    .vin-segment { flex: 1; text-align: center; padding: 0.5rem 0.25rem 0.4rem; border-right: 1px solid var(--line); transition: background 0.15s; }
+    .vin-segment:last-child { border-right: none; }
+    .vin-segment:hover { background: var(--bg3); }
+    .vin-segment-chars { font-family: var(--mono); font-size: 0.85rem; letter-spacing: 0.1em; color: var(--accent); display: block; margin-bottom: 3px; }
+    .vin-segment-label { font-size: 0.58rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; display: block; }
+    .status-bar { display: flex; align-items: center; gap: 1rem; padding: 0.75rem 1.25rem; background: var(--bg2); border: 1px solid var(--line); border-radius: 3px; margin-bottom: 1.5rem; }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .status-dot.valid { background: var(--success); box-shadow: 0 0 6px var(--success); }
+    .status-dot.invalid { background: var(--danger); box-shadow: 0 0 6px var(--danger); }
+    .status-vin { font-family: var(--mono); font-size: 0.85rem; letter-spacing: 0.12em; color: var(--text); }
+    .status-badge { font-family: var(--mono); font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.1em; padding: 3px 8px; border-radius: 2px; }
+    .status-badge.valid { background: rgba(90,158,114,0.15); color: var(--success); border: 1px solid rgba(90,158,114,0.3); }
+    .status-badge.invalid { background: rgba(192,97,74,0.15); color: var(--danger); border: 1px solid rgba(192,97,74,0.3); }
+    .status-conf { margin-left: auto; font-family: var(--mono); font-size: 0.75rem; color: var(--muted); }
+    .status-conf span { color: var(--accent); }
+    .cards-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 3px; overflow: hidden; margin-bottom: 1.5rem; }
+    .card { background: var(--bg2); padding: 1.25rem; }
+    .card-title { font-family: var(--mono); font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); margin-bottom: 1rem; }
+    .field { margin-bottom: 0.75rem; }
+    .field:last-child { margin-bottom: 0; }
+    .field-label { font-size: 0.7rem; color: var(--muted); margin-bottom: 2px; font-weight: 300; }
+    .field-value { font-size: 0.95rem; color: var(--text); font-weight: 400; }
+    .field-value.large { font-size: 1.4rem; font-weight: 300; font-family: var(--mono); color: var(--accent); }
+    .warnings { border: 1px solid rgba(192,97,74,0.25); border-radius: 3px; overflow: hidden; margin-bottom: 1.5rem; }
+    .warning-item { padding: 0.6rem 1rem; font-size: 0.8rem; color: var(--danger); border-bottom: 1px solid rgba(192,97,74,0.15); display: flex; gap: 0.6rem; align-items: flex-start; font-family: var(--mono); }
+    .warning-item:last-child { border-bottom: none; }
+    .warning-icon { flex-shrink: 0; opacity: 0.7; }
+    .meta-footer { display: flex; gap: 2rem; padding-top: 1rem; border-top: 1px solid var(--line); }
+    .meta-item { font-size: 0.72rem; color: var(--muted); font-family: var(--mono); }
+    .meta-item span { color: var(--text); }
+    .loading-state { display: flex; align-items: center; gap: 0.75rem; padding: 2rem 0; color: var(--muted); font-family: var(--mono); font-size: 0.8rem; }
+    .spinner { width: 16px; height: 16px; border: 1px solid var(--line2); border-top-color: var(--accent2); border-radius: 50%; animation: spin 0.7s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .error-state { padding: 1.25rem; border: 1px solid rgba(192,97,74,0.3); border-radius: 3px; color: var(--danger); font-family: var(--mono); font-size: 0.8rem; background: rgba(192,97,74,0.05); }
+    @media (max-width: 600px) { .cards-grid { grid-template-columns: 1fr; } .vin-segment-chars { font-size: 0.7rem; } }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="logo">
+        <span class="logo-name">Corgi</span>
+        <span class="logo-sep">/</span>
+        <span class="logo-sub" id="t-subtitle"></span>
+      </div>
+      <p class="tagline" id="t-tagline"></p>
+    </header>
+    <div class="search-section">
+      <div class="input-group">
+        <input id="vin-input" type="text" maxlength="17" autocomplete="off" spellcheck="false" />
+        <div class="char-counter" id="char-counter">0/17</div>
+        <button id="decode-btn" disabled></button>
+      </div>
+    </div>
+    <div id="result"></div>
+  </div>
+
+  <script>
+    const T = {
+      en: {
+        subtitle:'VIN Decoder',tagline:'Offline VIN decoding via the NHTSA VPIC database',
+        placeholder:'Enter VIN...',decodeBtn:'DECODE',decoding:'Decoding...',
+        connError:'Connection error',vinLength:'VIN must be exactly 17 characters.',
+        valid:'VALID',invalid:'INVALID',confidence:'Confidence',
+        segLabels:['WMI','VDS','Check','Model year','Plant','VIS'],
+        cardVehicle:'Vehicle',cardEngine:'Engine',cardPlant:'Plant',cardMfg:'Manufacturer',
+        cardCheck:'Check digit',cardYear:'Model year',
+        fMakeModel:'Make',fModel:'Model',fYear:'Model year',fTrim:'Trim',fBody:'Body style',
+        fDrive:'Drive type',fFuel:'Fuel type',fDoors:'Doors',fEngine:'Engine model',
+        fCyl:'Cylinders',fDisp:'Displacement',fMfr:'Manufacturer',fMake:'Make',
+        fCountry:'Country',fRegion:'Region',fCity:'City',fCode:'Code',
+        fCheckValid:'Valid',fCheckExp:'Expected',fCheckAct:'Actual',fSrc:'Source',fConf:'Confidence',
+        yes:'Yes',no:'No',metaConf:'CONFIDENCE',metaTime:'TIME',metaSrc:'SOURCE',
+      },
+      sv: {
+        subtitle:'VIN-avkodare',tagline:'Offline VIN-avkodning via NHTSA VPIC-databasen',
+        placeholder:'Ange VIN-nummer...',decodeBtn:'DEKODA',decoding:'Dekoderar...',
+        connError:'Anslutningsfel',vinLength:'VIN måste vara exakt 17 tecken.',
+        valid:'GILTIG',invalid:'OGILTIG',confidence:'Konfidens',
+        segLabels:['WMI','VDS','Kontroll','Årsmodell','Fabrik','VIS'],
+        cardVehicle:'Fordon',cardEngine:'Motor',cardPlant:'Fabrik',cardMfg:'Tillverkare',
+        cardCheck:'Kontrollsiffra',cardYear:'Årsmodell',
+        fMakeModel:'Märke',fModel:'Modell',fYear:'Årsmodell',fTrim:'Trim',fBody:'Karosstyp',
+        fDrive:'Drivning',fFuel:'Bränsle',fDoors:'Dörrar',fEngine:'Motormodell',
+        fCyl:'Cylindrar',fDisp:'Slagvolym',fMfr:'Tillverkare',fMake:'Märke',
+        fCountry:'Land',fRegion:'Region',fCity:'Stad',fCode:'Kod',
+        fCheckValid:'Giltig',fCheckExp:'Förväntad',fCheckAct:'Faktisk',fSrc:'Källa',fConf:'Konfidens',
+        yes:'Ja',no:'Nej',metaConf:'KONFIDENS',metaTime:'TID',metaSrc:'KÄLLA',
+      },
+      de: {
+        subtitle:'VIN-Decoder',tagline:'Offline-VIN-Dekodierung über die NHTSA VPIC-Datenbank',
+        placeholder:'FIN eingeben...',decodeBtn:'DEKODIEREN',decoding:'Dekodiert...',
+        connError:'Verbindungsfehler',vinLength:'FIN muss genau 17 Zeichen lang sein.',
+        valid:'GÜLTIG',invalid:'UNGÜLTIG',confidence:'Konfidenz',
+        segLabels:['WMI','VDS','Prüfziffer','Modelljahr','Werk','VIS'],
+        cardVehicle:'Fahrzeug',cardEngine:'Motor',cardPlant:'Werk',cardMfg:'Hersteller',
+        cardCheck:'Prüfziffer',cardYear:'Modelljahr',
+        fMakeModel:'Marke',fModel:'Modell',fYear:'Modelljahr',fTrim:'Ausstattung',fBody:'Karosserie',
+        fDrive:'Antrieb',fFuel:'Kraftstoff',fDoors:'Türen',fEngine:'Motormodell',
+        fCyl:'Zylinder',fDisp:'Hubraum',fMfr:'Hersteller',fMake:'Marke',
+        fCountry:'Land',fRegion:'Region',fCity:'Stadt',fCode:'Code',
+        fCheckValid:'Gültig',fCheckExp:'Erwartet',fCheckAct:'Tatsächlich',fSrc:'Quelle',fConf:'Konfidenz',
+        yes:'Ja',no:'Nein',metaConf:'KONFIDENZ',metaTime:'ZEIT',metaSrc:'QUELLE',
+      },
+      it: {
+        subtitle:'Decodificatore VIN',tagline:'Decodifica VIN offline tramite il database NHTSA VPIC',
+        placeholder:'Inserisci il VIN...',decodeBtn:'DECODIFICA',decoding:'Decodifica in corso...',
+        connError:'Errore di connessione',vinLength:'Il VIN deve essere esattamente di 17 caratteri.',
+        valid:'VALIDO',invalid:'NON VALIDO',confidence:'Attendibilità',
+        segLabels:['WMI','VDS','Controllo','Anno modello','Stabilimento','VIS'],
+        cardVehicle:'Veicolo',cardEngine:'Motore',cardPlant:'Stabilimento',cardMfg:'Produttore',
+        cardCheck:'Cifra di controllo',cardYear:'Anno modello',
+        fMakeModel:'Marca',fModel:'Modello',fYear:'Anno modello',fTrim:'Allestimento',fBody:'Carrozzeria',
+        fDrive:'Trazione',fFuel:'Carburante',fDoors:'Porte',fEngine:'Modello motore',
+        fCyl:'Cilindri',fDisp:'Cilindrata',fMfr:'Produttore',fMake:'Marca',
+        fCountry:'Paese',fRegion:'Regione',fCity:'Città',fCode:'Codice',
+        fCheckValid:'Valida',fCheckExp:'Attesa',fCheckAct:'Effettiva',fSrc:'Fonte',fConf:'Attendibilità',
+        yes:'Sì',no:'No',metaConf:'ATTENDIBILITÀ',metaTime:'TEMPO',metaSrc:'FONTE',
+      },
+      es: {
+        subtitle:'Decodificador VIN',tagline:'Decodificación VIN sin conexión mediante la base de datos NHTSA VPIC',
+        placeholder:'Introduce el VIN...',decodeBtn:'DECODIFICAR',decoding:'Decodificando...',
+        connError:'Error de conexión',vinLength:'El VIN debe tener exactamente 17 caracteres.',
+        valid:'VÁLIDO',invalid:'INVÁLIDO',confidence:'Confianza',
+        segLabels:['WMI','VDS','Control','Año modelo','Planta','VIS'],
+        cardVehicle:'Vehículo',cardEngine:'Motor',cardPlant:'Planta',cardMfg:'Fabricante',
+        cardCheck:'Dígito de control',cardYear:'Año modelo',
+        fMakeModel:'Marca',fModel:'Modelo',fYear:'Año modelo',fTrim:'Acabado',fBody:'Carrocería',
+        fDrive:'Tracción',fFuel:'Combustible',fDoors:'Puertas',fEngine:'Modelo de motor',
+        fCyl:'Cilindros',fDisp:'Cilindrada',fMfr:'Fabricante',fMake:'Marca',
+        fCountry:'País',fRegion:'Región',fCity:'Ciudad',fCode:'Código',
+        fCheckValid:'Válido',fCheckExp:'Esperado',fCheckAct:'Real',fSrc:'Fuente',fConf:'Confianza',
+        yes:'Sí',no:'No',metaConf:'CONFIANZA',metaTime:'TIEMPO',metaSrc:'FUENTE',
+      },
+      fr: {
+        subtitle:'Décodeur VIN',tagline:'Décodage VIN hors ligne via la base de données NHTSA VPIC',
+        placeholder:'Saisir le VIN...',decodeBtn:'DÉCODER',decoding:'Décodage en cours...',
+        connError:'Erreur de connexion',vinLength:'Le VIN doit comporter exactement 17 caractères.',
+        valid:'VALIDE',invalid:'INVALIDE',confidence:'Confiance',
+        segLabels:['WMI','VDS','Contrôle','Année modèle','Usine','VIS'],
+        cardVehicle:'Véhicule',cardEngine:'Moteur',cardPlant:'Usine',cardMfg:'Fabricant',
+        cardCheck:'Chiffre de contrôle',cardYear:'Année modèle',
+        fMakeModel:'Marque',fModel:'Modèle',fYear:'Année modèle',fTrim:'Finition',fBody:'Carrosserie',
+        fDrive:'Transmission',fFuel:'Carburant',fDoors:'Portes',fEngine:'Modèle moteur',
+        fCyl:'Cylindres',fDisp:'Cylindrée',fMfr:'Fabricant',fMake:'Marque',
+        fCountry:'Pays',fRegion:'Région',fCity:'Ville',fCode:'Code',
+        fCheckValid:'Valide',fCheckExp:'Attendu',fCheckAct:'Réel',fSrc:'Source',fConf:'Confiance',
+        yes:'Oui',no:'Non',metaConf:'CONFIANCE',metaTime:'TEMPS',metaSrc:'SOURCE',
+      },
+      pt: {
+        subtitle:'Decodificador VIN',tagline:'Decodificação VIN offline via base de dados NHTSA VPIC',
+        placeholder:'Insira o VIN...',decodeBtn:'DECODIFICAR',decoding:'Decodificando...',
+        connError:'Erro de conexão',vinLength:'O VIN deve ter exatamente 17 caracteres.',
+        valid:'VÁLIDO',invalid:'INVÁLIDO',confidence:'Confiança',
+        segLabels:['WMI','VDS','Controle','Ano modelo','Planta','VIS'],
+        cardVehicle:'Veículo',cardEngine:'Motor',cardPlant:'Planta',cardMfg:'Fabricante',
+        cardCheck:'Dígito de controle',cardYear:'Ano modelo',
+        fMakeModel:'Marca',fModel:'Modelo',fYear:'Ano modelo',fTrim:'Acabamento',fBody:'Carroceria',
+        fDrive:'Tração',fFuel:'Combustível',fDoors:'Portas',fEngine:'Modelo do motor',
+        fCyl:'Cilindros',fDisp:'Cilindrada',fMfr:'Fabricante',fMake:'Marca',
+        fCountry:'País',fRegion:'Região',fCity:'Cidade',fCode:'Código',
+        fCheckValid:'Válido',fCheckExp:'Esperado',fCheckAct:'Real',fSrc:'Fonte',fConf:'Confiança',
+        yes:'Sim',no:'Não',metaConf:'CONFIANÇA',metaTime:'TEMPO',metaSrc:'FONTE',
+      },
+      ja: {
+        subtitle:'VINデコーダー',tagline:'NHTSA VPICデータベースによるオフラインVIN解析',
+        placeholder:'VINを入力...',decodeBtn:'解析',decoding:'解析中...',
+        connError:'接続エラー',vinLength:'VINは正確に17文字である必要があります。',
+        valid:'有効',invalid:'無効',confidence:'信頼度',
+        segLabels:['WMI','VDS','検査桁','年式','工場','VIS'],
+        cardVehicle:'車両',cardEngine:'エンジン',cardPlant:'製造工場',cardMfg:'メーカー',
+        cardCheck:'検査桁',cardYear:'年式',
+        fMakeModel:'メーカー',fModel:'モデル',fYear:'年式',fTrim:'グレード',fBody:'ボディタイプ',
+        fDrive:'駆動方式',fFuel:'燃料',fDoors:'ドア数',fEngine:'エンジン型式',
+        fCyl:'気筒数',fDisp:'排気量',fMfr:'製造者',fMake:'ブランド',
+        fCountry:'国',fRegion:'地域',fCity:'都市',fCode:'コード',
+        fCheckValid:'有効',fCheckExp:'期待値',fCheckAct:'実際値',fSrc:'ソース',fConf:'信頼度',
+        yes:'はい',no:'いいえ',metaConf:'信頼度',metaTime:'処理時間',metaSrc:'ソース',
+      },
+      ko: {
+        subtitle:'VIN 디코더',tagline:'NHTSA VPIC 데이터베이스를 이용한 오프라인 VIN 해석',
+        placeholder:'VIN 번호 입력...',decodeBtn:'해석',decoding:'해석 중...',
+        connError:'연결 오류',vinLength:'VIN은 정확히 17자여야 합니다.',
+        valid:'유효',invalid:'무효',confidence:'신뢰도',
+        segLabels:['WMI','VDS','검사 숫자','연식','공장','VIS'],
+        cardVehicle:'차량',cardEngine:'엔진',cardPlant:'공장',cardMfg:'제조사',
+        cardCheck:'검사 숫자',cardYear:'연식',
+        fMakeModel:'제조사',fModel:'모델',fYear:'연식',fTrim:'트림',fBody:'차체 유형',
+        fDrive:'구동 방식',fFuel:'연료',fDoors:'도어 수',fEngine:'엔진 모델',
+        fCyl:'실린더',fDisp:'배기량',fMfr:'제조자',fMake:'브랜드',
+        fCountry:'국가',fRegion:'지역',fCity:'도시',fCode:'코드',
+        fCheckValid:'유효',fCheckExp:'예상값',fCheckAct:'실제값',fSrc:'출처',fConf:'신뢰도',
+        yes:'예',no:'아니오',metaConf:'신뢰도',metaTime:'처리 시간',metaSrc:'출처',
+      },
+      nl: {
+        subtitle:'VIN-decoder',tagline:'Offline VIN-decodering via de NHTSA VPIC-database',
+        placeholder:'Voer VIN in...',decodeBtn:'DECODEREN',decoding:'Decoderen...',
+        connError:'Verbindingsfout',vinLength:'Het VIN moet exact 17 tekens bevatten.',
+        valid:'GELDIG',invalid:'ONGELDIG',confidence:'Betrouwbaarheid',
+        segLabels:['WMI','VDS','Controlecijfer','Modeljaar','Fabriek','VIS'],
+        cardVehicle:'Voertuig',cardEngine:'Motor',cardPlant:'Fabriek',cardMfg:'Fabrikant',
+        cardCheck:'Controlecijfer',cardYear:'Modeljaar',
+        fMakeModel:'Merk',fModel:'Model',fYear:'Modeljaar',fTrim:'Uitvoering',fBody:'Carrosserie',
+        fDrive:'Aandrijving',fFuel:'Brandstof',fDoors:'Deuren',fEngine:'Motormodel',
+        fCyl:'Cilinders',fDisp:'Cilinderinhoud',fMfr:'Fabrikant',fMake:'Merk',
+        fCountry:'Land',fRegion:'Regio',fCity:'Stad',fCode:'Code',
+        fCheckValid:'Geldig',fCheckExp:'Verwacht',fCheckAct:'Werkelijk',fSrc:'Bron',fConf:'Betrouwbaarheid',
+        yes:'Ja',no:'Nee',metaConf:'BETROUWBAARHEID',metaTime:'TIJD',metaSrc:'BRON',
+      },
+    };
+
+    function getLang() {
+      const raw = (navigator.language || navigator.userLanguage || 'en').toLowerCase();
+      const prefixes = ['sv','de','it','es','fr','pt','ja','ko','nl'];
+      for (const p of prefixes) { if (raw.startsWith(p)) return p; }
+      return 'en';
+    }
+
+    const lang = getLang();
+    const t = T[lang];
+    document.documentElement.lang = lang;
+    document.getElementById('t-subtitle').textContent = t.subtitle;
+    document.getElementById('t-tagline').textContent = t.tagline;
+    document.getElementById('vin-input').placeholder = t.placeholder;
+    document.getElementById('decode-btn').textContent = t.decodeBtn;
+
+    const input = document.getElementById('vin-input');
+    const btn = document.getElementById('decode-btn');
+    const counter = document.getElementById('char-counter');
+    const resultEl = document.getElementById('result');
+
+    input.addEventListener('input', () => {
+      input.value = input.value.toUpperCase().replace(/[^A-HJ-NPR-Z0-9]/g, '');
+      const len = input.value.length;
+      counter.textContent = `${len}/17`;
+      counter.className = 'char-counter' + (len === 17 ? ' ready' : '');
+      btn.disabled = len !== 17;
+    });
+
+    input.addEventListener('keydown', e => { if (e.key === 'Enter' && !btn.disabled) decode(); });
+    btn.addEventListener('click', decode);
+
+    function decode() {
+      const vin = input.value.trim();
+      if (vin.length !== 17) return;
+      showLoading();
+      fetch(`/api/decode/${vin}`)
+        .then(r => r.json())
+        .then(render)
+        .catch(err => showError(err.message || t.connError));
+    }
+
+    function showLoading() {
+      resultEl.className = '';
+      resultEl.innerHTML = `<div class="loading-state"><div class="spinner"></div>${t.decoding}</div>`;
+      requestAnimationFrame(() => { resultEl.className = 'visible'; });
+    }
+
+    function showError(msg) {
+      resultEl.innerHTML = `<div class="error-state">&#9650; ${msg}</div>`;
+    }
+
+    function pct(val) {
+      if (val == null) return null;
+      return (parseFloat(val) * (val <= 1 ? 100 : 1)).toFixed(1) + '%';
+    }
+
+    function field(label, value) {
+      if (!value && value !== 0) return '';
+      return `<div class="field"><div class="field-label">${label}</div><div class="field-value">${value}</div></div>`;
+    }
+
+    function render(data) {
+      if (data.error) { showError(data.error); return; }
+
+      const v = data.components?.vehicle || {};
+      const e = data.components?.engine || {};
+      const w = data.components?.wmi || {};
+      const p = data.components?.plant || {};
+      const cy = data.components?.checkDigit || {};
+      const my = data.components?.modelYear || {};
+      const isValid = data.valid;
+      const conf = data.metadata?.confidence != null ? pct(data.metadata.confidence) : null;
+      const ms = data.metadata?.processingTime != null ? parseFloat(data.metadata.processingTime).toFixed(0) + ' ms' : null;
+      const vin = data.vin || input.value;
+
+      const vinBarHtml = [
+        { chars: vin.slice(0,3),   label: t.segLabels[0] },
+        { chars: vin.slice(3,8),   label: t.segLabels[1] },
+        { chars: vin.slice(8,9),   label: t.segLabels[2] },
+        { chars: vin.slice(9,10),  label: t.segLabels[3] },
+        { chars: vin.slice(10,11), label: t.segLabels[4] },
+        { chars: vin.slice(11,17), label: t.segLabels[5] },
+      ].map(s => `<div class="vin-segment"><span class="vin-segment-chars">${s.chars}</span><span class="vin-segment-label">${s.label}</span></div>`).join('');
+
+      const warns = (data.errors || []).filter(x => x.message);
+      const warnsHtml = warns.length ? `<div class="warnings">${warns.map(w => `<div class="warning-item"><span class="warning-icon">&#9650;</span>${w.message}</div>`).join('')}</div>` : '';
+
+      const vehicleCard = `<div class="card">
+        <div class="card-title">${t.cardVehicle}</div>
+        <div class="field"><div class="field-label">${t.fMakeModel}</div><div class="field-value large">${v.make || '—'}</div></div>
+        ${field(t.fModel, v.model)}${field(t.fYear, v.year)}${field(t.fTrim, v.series)}
+        ${field(t.fBody, v.bodyStyle)}${field(t.fDrive, v.driveType)}${field(t.fFuel, v.fuelType)}${field(t.fDoors, v.doors)}
+      </div>`;
+
+      const engineCard = `<div class="card">
+        <div class="card-title">${t.cardEngine}</div>
+        ${field(t.fEngine, e.model)}${field(t.fCyl, e.cylinders)}
+        ${field(t.fDisp, e.displacement ? e.displacement + ' L' : null)}${field(t.fFuel, e.fuel)}
+        <div class="card-title" style="margin-top:1rem;">${t.cardMfg}</div>
+        ${field(t.fMfr, w.manufacturer)}${field(t.fMake, w.make)}${field(t.fCountry, w.country)}${field(t.fRegion, w.region)}
+      </div>`;
+
+      const plantCard = `<div class="card">
+        <div class="card-title">${t.cardPlant}</div>
+        ${field(t.fCountry, p.country)}${field(t.fCity, p.city)}${field(t.fCode, p.code)}
+        <div class="card-title" style="margin-top:1rem;">${t.cardCheck}</div>
+        ${field(t.fCheckValid, cy.isValid != null ? (cy.isValid ? t.yes : t.no) : null)}
+        ${field(t.fCheckExp, cy.expected)}${field(t.fCheckAct, cy.actual)}
+        <div class="card-title" style="margin-top:1rem;">${t.cardYear}</div>
+        ${field(t.fYear, my.year)}${field(t.fSrc, my.source)}${field(t.fConf, my.confidence != null ? pct(my.confidence) : null)}
+      </div>`;
+
+      const metaHtml = (conf || ms) ? `<div class="meta-footer">
+        ${conf ? `<div class="meta-item">${t.metaConf} <span>${conf}</span></div>` : ''}
+        ${ms ? `<div class="meta-item">${t.metaTime} <span>${ms}</span></div>` : ''}
+        <div class="meta-item">${t.metaSrc} <span>NHTSA VPIC</span></div>
+      </div>` : '';
+
+      resultEl.className = '';
+      resultEl.innerHTML = `
+        <div class="vin-bar">${vinBarHtml}</div>
+        <div class="status-bar">
+          <div class="status-dot ${isValid ? 'valid' : 'invalid'}"></div>
+          <span class="status-vin">${vin}</span>
+          <span class="status-badge ${isValid ? 'valid' : 'invalid'}">${isValid ? t.valid : t.invalid}</span>
+          ${conf ? `<div class="status-conf">${t.confidence} <span>${conf}</span></div>` : ''}
+        </div>
+        ${warnsHtml}
+        <div class="cards-grid">${vehicleCard}${engineCard}${plantCard}</div>
+        ${metaHtml}
+      `;
+      requestAnimationFrame(() => { resultEl.className = 'visible'; });
+    }
+  </script>
+</body>
+</html>

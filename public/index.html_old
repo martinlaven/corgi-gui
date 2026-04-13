@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Corgi — VIN Decoder</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0d0d0d;
+      --bg2: #161616;
+      --bg3: #1e1e1e;
+      --line: rgba(255,255,255,0.08);
+      --line2: rgba(255,255,255,0.14);
+      --text: #f0ede8;
+      --muted: #6b6760;
+      --accent: #e8d5a3;
+      --accent2: #c9a84c;
+      --danger: #c0614a;
+      --success: #5a9e72;
+      --mono: 'Space Mono', monospace;
+      --sans: 'DM Sans', sans-serif;
+    }
+
+    html, body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+      background-size: 48px 48px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .container {
+      position: relative;
+      z-index: 1;
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 0 2rem;
+    }
+
+    header {
+      padding: 3rem 0 2.5rem;
+      border-bottom: 1px solid var(--line);
+      margin-bottom: 3rem;
+    }
+
+    .logo {
+      display: flex;
+      align-items: baseline;
+      gap: 0.75rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .logo-name {
+      font-family: var(--mono);
+      font-size: 1.1rem;
+      font-weight: 700;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: var(--accent);
+    }
+
+    .logo-sep { color: var(--muted); font-family: var(--mono); }
+
+    .logo-sub {
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      color: var(--muted);
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    .tagline {
+      font-size: 0.85rem;
+      color: var(--muted);
+      font-weight: 300;
+      letter-spacing: 0.02em;
+    }
+
+    .search-section { margin-bottom: 2.5rem; }
+
+    .input-group {
+      display: flex;
+      border: 1px solid var(--line2);
+      border-radius: 4px;
+      overflow: hidden;
+      transition: border-color 0.2s;
+    }
+
+    .input-group:focus-within { border-color: var(--accent2); }
+
+    #vin-input {
+      flex: 1;
+      background: var(--bg2);
+      border: none;
+      outline: none;
+      padding: 0.9rem 1.25rem;
+      font-family: var(--mono);
+      font-size: 1rem;
+      letter-spacing: 0.12em;
+      color: var(--text);
+      text-transform: uppercase;
+    }
+
+    #vin-input::placeholder {
+      color: var(--muted);
+      letter-spacing: 0.05em;
+      font-size: 0.85rem;
+    }
+
+    .char-counter {
+      display: flex;
+      align-items: center;
+      padding: 0 1rem;
+      background: var(--bg2);
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      color: var(--muted);
+      border-left: 1px solid var(--line);
+      min-width: 52px;
+      justify-content: center;
+      transition: color 0.2s;
+    }
+
+    .char-counter.ready { color: var(--success); }
+
+    #decode-btn {
+      background: var(--accent2);
+      color: #0d0d0d;
+      border: none;
+      padding: 0 1.5rem;
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: background 0.15s, transform 0.1s;
+      border-left: 1px solid rgba(0,0,0,0.2);
+    }
+
+    #decode-btn:hover { background: var(--accent); }
+    #decode-btn:active { transform: scale(0.97); }
+    #decode-btn:disabled { background: var(--bg3); color: var(--muted); cursor: default; }
+
+    #result {
+      opacity: 0;
+      transform: translateY(8px);
+      transition: opacity 0.3s, transform 0.3s;
+    }
+
+    #result.visible { opacity: 1; transform: translateY(0); }
+
+    .vin-bar {
+      display: flex;
+      margin-bottom: 1.5rem;
+      border: 1px solid var(--line);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+
+    .vin-segment {
+      flex: 1;
+      text-align: center;
+      padding: 0.5rem 0.25rem 0.4rem;
+      border-right: 1px solid var(--line);
+      transition: background 0.15s;
+    }
+
+    .vin-segment:last-child { border-right: none; }
+    .vin-segment:hover { background: var(--bg3); }
+
+    .vin-segment-chars {
+      font-family: var(--mono);
+      font-size: 0.85rem;
+      letter-spacing: 0.1em;
+      color: var(--accent);
+      display: block;
+      margin-bottom: 3px;
+    }
+
+    .vin-segment-label {
+      font-size: 0.58rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      display: block;
+    }
+
+    .status-bar {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      padding: 0.75rem 1.25rem;
+      background: var(--bg2);
+      border: 1px solid var(--line);
+      border-radius: 3px;
+      margin-bottom: 1.5rem;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .status-dot.valid { background: var(--success); box-shadow: 0 0 6px var(--success); }
+    .status-dot.invalid { background: var(--danger); box-shadow: 0 0 6px var(--danger); }
+
+    .status-vin {
+      font-family: var(--mono);
+      font-size: 0.85rem;
+      letter-spacing: 0.12em;
+      color: var(--text);
+    }
+
+    .status-badge {
+      font-family: var(--mono);
+      font-size: 0.65rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      padding: 3px 8px;
+      border-radius: 2px;
+    }
+
+    .status-badge.valid { background: rgba(90,158,114,0.15); color: var(--success); border: 1px solid rgba(90,158,114,0.3); }
+    .status-badge.invalid { background: rgba(192,97,74,0.15); color: var(--danger); border: 1px solid rgba(192,97,74,0.3); }
+
+    .status-conf { margin-left: auto; font-family: var(--mono); font-size: 0.75rem; color: var(--muted); }
+    .status-conf span { color: var(--accent); }
+
+    .cards-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1px;
+      background: var(--line);
+      border: 1px solid var(--line);
+      border-radius: 3px;
+      overflow: hidden;
+      margin-bottom: 1.5rem;
+    }
+
+    .card { background: var(--bg2); padding: 1.25rem; }
+
+    .card-title {
+      font-family: var(--mono);
+      font-size: 0.6rem;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--muted);
+      margin-bottom: 1rem;
+    }
+
+    .field { margin-bottom: 0.75rem; }
+    .field:last-child { margin-bottom: 0; }
+    .field-label { font-size: 0.7rem; color: var(--muted); margin-bottom: 2px; font-weight: 300; }
+    .field-value { font-size: 0.95rem; color: var(--text); font-weight: 400; }
+    .field-value.large { font-size: 1.4rem; font-weight: 300; font-family: var(--mono); color: var(--accent); }
+
+    .warnings {
+      border: 1px solid rgba(192,97,74,0.25);
+      border-radius: 3px;
+      overflow: hidden;
+      margin-bottom: 1.5rem;
+    }
+
+    .warning-item {
+      padding: 0.6rem 1rem;
+      font-size: 0.8rem;
+      color: var(--danger);
+      border-bottom: 1px solid rgba(192,97,74,0.15);
+      display: flex;
+      gap: 0.6rem;
+      align-items: flex-start;
+      font-family: var(--mono);
+    }
+
+    .warning-item:last-child { border-bottom: none; }
+    .warning-icon { flex-shrink: 0; opacity: 0.7; }
+
+    .meta-footer {
+      display: flex;
+      gap: 2rem;
+      padding-top: 1rem;
+      border-top: 1px solid var(--line);
+    }
+
+    .meta-item { font-size: 0.72rem; color: var(--muted); font-family: var(--mono); }
+    .meta-item span { color: var(--text); }
+
+    .loading-state {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 2rem 0;
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 0.8rem;
+    }
+
+    .spinner {
+      width: 16px;
+      height: 16px;
+      border: 1px solid var(--line2);
+      border-top-color: var(--accent2);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .error-state {
+      padding: 1.25rem;
+      border: 1px solid rgba(192,97,74,0.3);
+      border-radius: 3px;
+      color: var(--danger);
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      background: rgba(192,97,74,0.05);
+    }
+
+    @media (max-width: 600px) {
+      .cards-grid { grid-template-columns: 1fr; }
+      .vin-segment-chars { font-size: 0.7rem; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="logo">
+        <span class="logo-name">Corgi</span>
+        <span class="logo-sep">/</span>
+        <span class="logo-sub" id="t-subtitle">VIN Decoder</span>
+      </div>
+      <p class="tagline" id="t-tagline"></p>
+    </header>
+
+    <div class="search-section">
+      <div class="input-group">
+        <input
+          id="vin-input"
+          type="text"
+          maxlength="17"
+          autocomplete="off"
+          spellcheck="false"
+        />
+        <div class="char-counter" id="char-counter">0/17</div>
+        <button id="decode-btn" disabled></button>
+      </div>
+    </div>
+
+    <div id="result"></div>
+  </div>
+
+  <script>
+    const TRANSLATIONS = {
+      sv: {
+        subtitle: 'VIN-avkodare',
+        tagline: 'Offline VIN-avkodning via NHTSA VPIC-databasen',
+        placeholder: 'Ange VIN-nummer...',
+        decodeBtn: 'DEKODA',
+        decoding: 'Dekoderar...',
+        connError: 'Anslutningsfel',
+        vinLength: 'VIN måste vara exakt 17 tecken.',
+        valid: 'GILTIG',
+        invalid: 'OGILTIG',
+        confidence: 'Konfidens',
+        segLabels: ['WMI', 'VDS', 'Kontroll', 'Årsmodell', 'Fabrik', 'VIS'],
+        cardVehicle: 'Fordon',
+        cardEngine: 'Motor',
+        cardPlant: 'Fabrik',
+        cardMfg: 'Tillverkare',
+        cardCheck: 'Kontrollsiffra',
+        cardYear: 'Årsmodell',
+        fMakeModel: 'Märke',
+        fModel: 'Modell',
+        fYear: 'Årsmodell',
+        fTrim: 'Trim',
+        fBody: 'Karosstyp',
+        fDrive: 'Drivning',
+        fFuel: 'Bränsle',
+        fEngine: 'Motormodell',
+        fCyl: 'Cylindrar',
+        fDisp: 'Slagvolym',
+        fMfr: 'Tillverkare',
+        fMake: 'Märke',
+        fCountry: 'Land',
+        fRegion: 'Region',
+        fCity: 'Stad',
+        fCode: 'Kod',
+        fCheckValid: 'Giltig',
+        fCheckExp: 'Förväntad',
+        fCheckAct: 'Faktisk',
+        fSrc: 'Källa',
+        fConf: 'Konfidens',
+        yes: 'Ja',
+        no: 'Nej',
+        metaConf: 'KONFIDENS',
+        metaTime: 'TID',
+        metaSrc: 'KÄLLA',
+      },
+      en: {
+        subtitle: 'VIN Decoder',
+        tagline: 'Offline VIN decoding via the NHTSA VPIC database',
+        placeholder: 'Enter VIN...',
+        decodeBtn: 'DECODE',
+        decoding: 'Decoding...',
+        connError: 'Connection error',
+        vinLength: 'VIN must be exactly 17 characters.',
+        valid: 'VALID',
+        invalid: 'INVALID',
+        confidence: 'Confidence',
+        segLabels: ['WMI', 'VDS', 'Check', 'Model year', 'Plant', 'VIS'],
+        cardVehicle: 'Vehicle',
+        cardEngine: 'Engine',
+        cardPlant: 'Plant',
+        cardMfg: 'Manufacturer',
+        cardCheck: 'Check digit',
+        cardYear: 'Model year',
+        fMakeModel: 'Make',
+        fModel: 'Model',
+        fYear: 'Model year',
+        fTrim: 'Trim',
+        fBody: 'Body style',
+        fDrive: 'Drive type',
+        fFuel: 'Fuel type',
+        fEngine: 'Engine model',
+        fCyl: 'Cylinders',
+        fDisp: 'Displacement',
+        fMfr: 'Manufacturer',
+        fMake: 'Make',
+        fCountry: 'Country',
+        fRegion: 'Region',
+        fCity: 'City',
+        fCode: 'Code',
+        fCheckValid: 'Valid',
+        fCheckExp: 'Expected',
+        fCheckAct: 'Actual',
+        fSrc: 'Source',
+        fConf: 'Confidence',
+        yes: 'Yes',
+        no: 'No',
+        metaConf: 'CONFIDENCE',
+        metaTime: 'TIME',
+        metaSrc: 'SOURCE',
+      }
+    };
+
+    function getLang() {
+      const raw = (navigator.language || navigator.userLanguage || 'en').toLowerCase();
+      if (raw.startsWith('sv')) return 'sv';
+      return 'en';
+    }
+
+    const t = TRANSLATIONS[getLang()];
+
+    // Apply static translations
+    document.documentElement.lang = getLang();
+    document.getElementById('t-subtitle').textContent = t.subtitle;
+    document.getElementById('t-tagline').textContent = t.tagline;
+    document.getElementById('vin-input').placeholder = t.placeholder;
+    document.getElementById('decode-btn').textContent = t.decodeBtn;
+
+    const input = document.getElementById('vin-input');
+    const btn = document.getElementById('decode-btn');
+    const counter = document.getElementById('char-counter');
+    const resultEl = document.getElementById('result');
+
+    input.addEventListener('input', () => {
+      input.value = input.value.toUpperCase().replace(/[^A-HJ-NPR-Z0-9]/g, '');
+      const len = input.value.length;
+      counter.textContent = `${len}/17`;
+      counter.className = 'char-counter' + (len === 17 ? ' ready' : '');
+      btn.disabled = len !== 17;
+    });
+
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && !btn.disabled) decode();
+    });
+
+    btn.addEventListener('click', decode);
+
+    function decode() {
+      const vin = input.value.trim();
+      if (vin.length !== 17) return;
+      showLoading();
+      fetch(`/api/decode/${vin}`)
+        .then(r => r.json())
+        .then(render)
+        .catch(err => showError(err.message || t.connError));
+    }
+
+    function showLoading() {
+      resultEl.className = '';
+      resultEl.innerHTML = `<div class="loading-state"><div class="spinner"></div>${t.decoding}</div>`;
+      requestAnimationFrame(() => { resultEl.className = 'visible'; });
+    }
+
+    function showError(msg) {
+      resultEl.innerHTML = `<div class="error-state">&#9650; ${msg}</div>`;
+    }
+
+    function pct(val) {
+      if (val == null) return null;
+      return (parseFloat(val) * (val <= 1 ? 100 : 1)).toFixed(1) + '%';
+    }
+
+    function render(data) {
+      if (data.error) { showError(data.error); return; }
+
+      const v = data.components?.vehicle || {};
+      const e = data.components?.engine || {};
+      const w = data.components?.wmi || {};
+      const p = data.components?.plant || {};
+      const cy = data.components?.checkDigit || {};
+      const my = data.components?.modelYear || {};
+
+      const isValid = data.valid;
+      const conf = data.metadata?.confidence != null ? pct(data.metadata.confidence) : null;
+      const ms = data.metadata?.processingTime != null
+        ? parseFloat(data.metadata.processingTime).toFixed(0) + ' ms'
+        : null;
+
+      const vin = data.vin || input.value;
+
+      const segDefs = [
+        { chars: vin.slice(0,3),   label: t.segLabels[0] },
+        { chars: vin.slice(3,8),   label: t.segLabels[1] },
+        { chars: vin.slice(8,9),   label: t.segLabels[2] },
+        { chars: vin.slice(9,10),  label: t.segLabels[3] },
+        { chars: vin.slice(10,11), label: t.segLabels[4] },
+        { chars: vin.slice(11,17), label: t.segLabels[5] },
+      ];
+
+      const vinBarHtml = segDefs.map(s => `
+        <div class="vin-segment">
+          <span class="vin-segment-chars">${s.chars}</span>
+          <span class="vin-segment-label">${s.label}</span>
+        </div>`).join('');
+
+      const warns = (data.errors || []).filter(e => e.message);
+      const warnsHtml = warns.length ? `
+        <div class="warnings">
+          ${warns.map(w => `<div class="warning-item"><span class="warning-icon">&#9650;</span>${w.message}</div>`).join('')}
+        </div>` : '';
+
+      function field(label, value) {
+        if (!value && value !== 0) return '';
+        return `<div class="field"><div class="field-label">${label}</div><div class="field-value">${value}</div></div>`;
+      }
+
+      const vehicleCard = `
+        <div class="card">
+          <div class="card-title">${t.cardVehicle}</div>
+          <div class="field"><div class="field-label">${t.fMakeModel}</div><div class="field-value large">${v.make || '—'}</div></div>
+          ${field(t.fModel, v.model)}
+          ${field(t.fYear, v.year)}
+          ${field(t.fTrim, v.series)}
+          ${field(t.fBody, v.bodyStyle)}
+          ${field(t.fDrive, v.driveType)}
+          ${field(t.fFuel, v.fuelType)}
+          ${field('Doors', v.doors)}
+        </div>`;
+
+      const engineCard = `
+        <div class="card">
+          <div class="card-title">${t.cardEngine}</div>
+          ${field(t.fEngine, e.model)}
+          ${field(t.fCyl, e.cylinders)}
+          ${field(t.fDisp, e.displacement ? e.displacement + ' L' : null)}
+          ${field(t.fFuel, e.fuel)}
+          <div class="card-title" style="margin-top:1rem;">${t.cardMfg}</div>
+          ${field(t.fMfr, w.manufacturer)}
+          ${field(t.fMake, w.make)}
+          ${field(t.fCountry, w.country)}
+          ${field(t.fRegion, w.region)}
+        </div>`;
+
+      const plantCard = `
+        <div class="card">
+          <div class="card-title">${t.cardPlant}</div>
+          ${field(t.fCountry, p.country)}
+          ${field(t.fCity, p.city)}
+          ${field(t.fCode, p.code)}
+          <div class="card-title" style="margin-top:1rem;">${t.cardCheck}</div>
+          ${field(t.fCheckValid, cy.isValid != null ? (cy.isValid ? t.yes : t.no) : null)}
+          ${field(t.fCheckExp, cy.expected)}
+          ${field(t.fCheckAct, cy.actual)}
+          <div class="card-title" style="margin-top:1rem;">${t.cardYear}</div>
+          ${field(t.fYear, my.year)}
+          ${field(t.fSrc, my.source)}
+          ${field(t.fConf, my.confidence != null ? pct(my.confidence) : null)}
+        </div>`;
+
+      const metaHtml = (conf || ms) ? `
+        <div class="meta-footer">
+          ${conf ? `<div class="meta-item">${t.metaConf} <span>${conf}</span></div>` : ''}
+          ${ms ? `<div class="meta-item">${t.metaTime} <span>${ms}</span></div>` : ''}
+          <div class="meta-item">${t.metaSrc} <span>NHTSA VPIC</span></div>
+        </div>` : '';
+
+      resultEl.className = '';
+      resultEl.innerHTML = `
+        <div class="vin-bar">${vinBarHtml}</div>
+        <div class="status-bar">
+          <div class="status-dot ${isValid ? 'valid' : 'invalid'}"></div>
+          <span class="status-vin">${vin}</span>
+          <span class="status-badge ${isValid ? 'valid' : 'invalid'}">${isValid ? t.valid : t.invalid}</span>
+          ${conf ? `<div class="status-conf">${t.confidence} <span>${conf}</span></div>` : ''}
+        </div>
+        ${warnsHtml}
+        <div class="cards-grid">${vehicleCard}${engineCard}${plantCard}</div>
+        ${metaHtml}
+      `;
+
+      requestAnimationFrame(() => { resultEl.className = 'visible'; });
+    }
+  </script>
+</body>
+</html>
