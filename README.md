@@ -2,7 +2,7 @@
 
 A self-hosted web interface for decoding Vehicle Identification Numbers (VINs), powered by [cardog-ai/corgi](https://github.com/cardog-ai/corgi) and the NHTSA VPIC database.
 
-![Screenshot](https://i.imgur.com/placeholder.png)
+![Corgi GUI screenshot](assets/corgi-gui_screenshot.png)
 
 ## Features
 
@@ -12,11 +12,12 @@ A self-hosted web interface for decoding Vehicle Identification Numbers (VINs), 
 - Confidence score and processing time per decode
 - Fully offline after first run — no external API calls
 - VPIC database cached on disk, pre-warmed at build time
+- Localized UI — automatically adapts to the browser's language (English, Swedish, German, Italian, Spanish, French, Portuguese, Japanese, Korean, Dutch)
 
 ## Quick start
 
 ```bash
-git clone https://github.com/DITTNAMN/corgi-gui.git
+git clone https://github.com/martinlaven/corgi-gui.git
 cd corgi-gui
 docker compose up -d
 ```
@@ -38,6 +39,8 @@ The VPIC database is cached in a Docker volume (`vpic_cache`) and persists acros
 
 ```
 corgi-gui/
+├── assets/
+│   └── corgi-gui_screenshot.png
 ├── Dockerfile
 ├── docker-compose.yml
 ├── package.json
@@ -66,6 +69,7 @@ curl http://localhost:3000/api/decode/1HGCM82633A123456
 - [corgi](https://github.com/cardog-ai/corgi) — fast offline VIN decoding
 - [Express](https://expressjs.com/) — HTTP server
 - [Docker](https://www.docker.com/) — containerization
+- [Claude](https://claude.ai) (Anthropic) — built with AI assistance
 
 ## License
 
